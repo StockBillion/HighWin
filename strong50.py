@@ -7,11 +7,63 @@ from turtle.data import StockDataSource, StockData_Tushare
 # from dateutil.relativedelta import relativedelta
 
 
-# class StockSlope:
-#     '股价的斜率'
+class IndexConts(data.StockData_SQLite):
 
-#     def __init__(self, _cycle_month = 36):
-#         self.ds, self.ks, self.bs = [], [], []
+    def __init__(self, data_db):
+        data.StockData_SQLite.__init__(self, data_db)
+
+    def load_data(self, code, sttdate, enddate):
+        down_data = self.download_tushare(code, sttdate, enddate, 'stock', 'daily')
+        if len(down_data):
+            self.write_stock(down_data, 'daily')
+        down_data = self.download_tushare(code, sttdate, enddate, 'stock', 'weekly')
+        if len(down_data):
+            self.write_stock(down_data, 'weekly')
+        down_data = self.download_tushare(code, sttdate, enddate, 'stock', 'monthly')
+        if len(down_data):
+            self.write_stock(down_data, 'monthly')
+
+    def load_const(self, _index_code, stock_count = 300):
+        # sdsr = data.StockData_SQLite(data_db)
+        y, m = 2005, 7
+        sttdate, enddate = '20000101', '20190601'
+        count, stock_codes = 0, []
+
+        for i in range(0, 56):
+            _end = dt.datetime(y, m, 1)
+            _stt  = _end + dt.timedelta(days=-30)
+            _stt = StockDataSource.str_date(_stt)
+            _end = StockDataSource.str_date(_end)
+
+            m += 3
+            if m > 12:
+                y, m = y+1, 1
+
+            df = StockData_Tushare.ts_api.index_weight(index_code=_index_code, 
+                start_date = _stt, end_date = _end)
+            if len(df) < stock_count:
+                continue
+            consts = df.head(stock_count)
+
+            for index, row in consts.iterrows():
+                code = row['con_code']
+                self.read_stock(row['con_code'], sttdate, enddate)
+                if len(self.stocks):
+                    continue
+                self.load_data(row['con_code'], sttdate, enddate)
+
+                stock_codes.append(code)
+                count += 1
+                if count%20 == 0:
+                    print( stock_codes )
+                    stock_codes = []
+
+        if len(stock_codes):
+            print( stock_codes )
+
+            # if len(df) >= stock_count:
+            #     count = self.load_data(df.head(stock_count))
+            #     print( 'load %d stocks\' data on %s.'%(count, _end) )
 
 
 class StrongIndex:
@@ -58,7 +110,7 @@ class StrongIndex:
         sdsr = data.StockData_SQLite( data_db )
         y, m, count = 2005, 7, 0
         sttdate, enddate = '20000101', '20190601'
-        detla1, delta2 = (self.cycle_month[0]/12.)*365., (self.cycle_month[1]/12.)*365.
+        delta1, delta2 = (self.cycle_month[0]/12.)*365., (self.cycle_month[1]/12.)*365.
 
         for i in range(0, 56):
             _end = dt.datetime(y, m, 1)
@@ -92,19 +144,19 @@ class StrongIndex:
                 data_vect = numpy.transpose(data_list)
                 data_vect[4] = list(map(lambda x: math.log(x), data_vect[4]))
 
-                chgsi1, ks1, bs1 = self.calc_index(data_vect[0], data_vect[4], detla1)
-                chgsi2, ks2, bs2 = self.calc_index(data_vect[0], data_vect[4], detla2)
+                chgs1, ks1, bs1 = self.calc_index(data_vect[0], data_vect[4], delta1)
+                chgs2, ks2, bs2 = self.calc_index(data_vect[0], data_vect[4], delta2)
 
                 _sql = 'INSERT INTO strong_indexs (ts_code, trade_date, close, chg1, k1, b1, chg2, k2, b2)\
                         VALUES (?,?,?,?,?,?,?,?,?);'
                 _codes = [code for _ in range(_len)]
-                _vect = [_codes, _dates, data_vect[4], chgsi1, ks1, bs1, chgsi2, ks2, bs2]
+                _vect = [_codes, _dates, data_vect[4], chgs1, ks1, bs1, chgs2, ks2, bs2]
                 self.curs.executemany( _sql, numpy.transpose( _vect ) )
 
             # count = self.calc(df.head(30), sdsr)
             print( 'calc %d stocks\' index on %s.'%(count, _end) )
 
-    def calc_stock_index(self, dates, logdata, daydetla = 300):
+    def calc_strong_index(self, dates, logdata, daydetla = 300):
         # logdata = list(map(lambda x: math.log(x), data_vect[4]))
         il, ir, _len = 0, 0, len(logdata)
         chgsi, ks, bs = logdata, [0 for _ in range(_len)], [0 for _ in range(_len)]
@@ -119,57 +171,6 @@ class StrongIndex:
         return chgsi, ks, bs
 
 
-    def load_data(self, consts, sdsr):
-        sttdate, enddate = '20000101', '20190601'
-        count, stock_codes = 0, []
-
-        for index, row in consts.iterrows():
-            code = row['con_code']
-            sdsr.read_stock(code, sttdate, enddate)
-            if len(sdsr.stocks):
-                continue
-
-            down_data = sdsr.download_tushare(code, sttdate, enddate, 'stock', 'daily')
-            if len(down_data):
-                sdsr.write_stock(down_data, 'daily')
-            down_data = sdsr.download_tushare(code, sttdate, enddate, 'stock', 'weekly')
-            if len(down_data):
-                sdsr.write_stock(down_data, 'weekly')
-            down_data = sdsr.download_tushare(code, sttdate, enddate, 'stock', 'monthly')
-            if len(down_data):
-                sdsr.write_stock(down_data, 'monthly')
-
-            stock_codes.append(code)
-            count += 1
-            if count%20 == 0:
-                print( stock_codes )
-                stock_codes = []
-
-        if len(stock_codes):
-            print( stock_codes )
-        return count
-
-    def load_const(self, data_db, _index_code, stock_count = 300):
-        sdsr = data.StockData_SQLite(data_db)
-        y, m = 2005, 7
-
-        for i in range(0, 56):
-            _end = dt.datetime(y, m, 1)
-            _stt  = _end + dt.timedelta(days=-30)
-            _stt = StockDataSource.str_date(_stt)
-            _end = StockDataSource.str_date(_end)
-
-            df = StockData_Tushare.ts_api.index_weight(index_code=_index_code, 
-                start_date = _stt, end_date = _end)
-            if len(df) >= stock_count:
-                count = self.load_data(df.head(stock_count), sdsr)
-                print( 'load %d stocks\' data on %s.'%(count, _end) )
-
-            m += 3
-            if m > 12:
-                y, m = y+1, 1
-
-
 if __name__ == "__main__":
     files = [':memory:', ':memory:']
     parser = argparse.ArgumentParser(description="show example")
@@ -182,9 +183,67 @@ if __name__ == "__main__":
             files[i] = args.files[i]
 
     si = StrongIndex(files[1])
-    # si.load_const(files[0])
-    si.calc_index(files[0], '399300.sz', 300)
+    si.load_const(files[0], '399300.sz', 300)
+    # si.calc_index(files[0], '399300.sz', 300)
 
+
+
+    # def load_data(self, consts, sdsr):
+    #     sttdate, enddate = '20000101', '20190601'
+    #     count, stock_codes = 0, []
+
+    #     for index, row in consts.iterrows():
+    #         code = row['con_code']
+    #         sdsr.read_stock(code, sttdate, enddate)
+    #         if len(sdsr.stocks):
+    #             continue
+
+    #         down_data = sdsr.download_tushare(code, sttdate, enddate, 'stock', 'daily')
+    #         if len(down_data):
+    #             sdsr.write_stock(down_data, 'daily')
+    #         down_data = sdsr.download_tushare(code, sttdate, enddate, 'stock', 'weekly')
+    #         if len(down_data):
+    #             sdsr.write_stock(down_data, 'weekly')
+    #         down_data = sdsr.download_tushare(code, sttdate, enddate, 'stock', 'monthly')
+    #         if len(down_data):
+    #             sdsr.write_stock(down_data, 'monthly')
+
+    #         stock_codes.append(code)
+    #         count += 1
+    #         if count%20 == 0:
+    #             print( stock_codes )
+    #             stock_codes = []
+
+    #     if len(stock_codes):
+    #         print( stock_codes )
+    #     return count
+
+    # def load_const(self, data_db, _index_code, stock_count = 300):
+    #     sdsr = data.StockData_SQLite(data_db)
+    #     y, m = 2005, 7
+
+    #     for i in range(0, 56):
+    #         _end = dt.datetime(y, m, 1)
+    #         _stt  = _end + dt.timedelta(days=-30)
+    #         _stt = StockDataSource.str_date(_stt)
+    #         _end = StockDataSource.str_date(_end)
+
+    #         df = StockData_Tushare.ts_api.index_weight(index_code=_index_code, 
+    #             start_date = _stt, end_date = _end)
+    #         if len(df) >= stock_count:
+    #             count = self.load_data(df.head(stock_count), sdsr)
+    #             print( 'load %d stocks\' data on %s.'%(count, _end) )
+
+    #         m += 3
+    #         if m > 12:
+    #             y, m = y+1, 1
+
+
+# class StockSlope:
+#     '股价的斜率'
+
+#     def __init__(self, _cycle_month = 36):
+#         self.ds, self.ks, self.bs = [], [], []
 
     # def calc_group(self, consts, sdsr):
     #     sttdate, enddate = '20000101', '20190601'

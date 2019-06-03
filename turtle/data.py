@@ -257,7 +257,7 @@ class StockData_SQLite(StockData_Tushare):
         self.stocks = pd_sql.read_sql(_sql, self.conn)
 
     def write_stock(self, stock_data, freq):
-        _len, freq = len(stock_data), self.format_freq(time_unit)
+        _len, freq = len(stock_data), self.format_freq(freq)
         if not _len:
             return
 

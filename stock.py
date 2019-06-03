@@ -25,7 +25,7 @@ class TurtleList(index.TurtleArgs):
             index_long = index.LongTurtleIndex(turtle, _data_vec, self.turtle_args[2], 
                         self.turtle_args[3], self.turtle_args[0], self.turtle_args[1])
             Hl = turtle.high_prices[self.turtle_args[2]]
-            print( Hl )
+            # print( Hl )
 
             turtle = index.TurtleIndex()
             index_short = index.LongTurtleIndex(turtle, _data_vec, self.turtle_args[3], 
